@@ -4,7 +4,6 @@
 #include <Servo.h>
 #include <Keypad.h>
 #include <LiquidCrystal_I2C.h>
-
 #define RST_PIN 9
 #define SS_PIN 10
 
@@ -23,11 +22,11 @@ int defaultPassword1 = 1234;
 int defaultPassword2 = 9999;
 int systemPassword1;
 int systemPassword2;
-String UIDMaster = "0228581a";
-String secondUID = "1f07d0bd";
+const String UIDMaster = "0228581a";
+String secondUID;
 int delayTimeDefault = 3000;
-
 int attempts = 3;
+int changePassAttempts = 3;
 int lockMins = 1;
 boolean isWarning = false;
 int lockDelay = 1000;
@@ -36,13 +35,13 @@ int secs = 0;
 
 int lastDoorState = 0;
 int buzzerPin = 8;
+int servoPin = 3;
 int resetPassPin = 2;
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C và kích thước màn hình LCD (16x2)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 Servo myServo;
-int servoPin = 3;
 
 void setup() {
   // Setup serial port
@@ -63,9 +62,10 @@ void setup() {
   pinMode(resetPassPin, INPUT_PULLUP);
   pinMode(buzzerPin, OUTPUT);
 
-  // Setup EEPROM để lưu mật khẩu
+  // Đọc lại mật khẩu và UID từ EEPROM
   systemPassword1 = EEPROM.readInt(10);
   systemPassword2 = EEPROM.readInt(100);
+  secondUID = readUIDFromEEPROM(500);
 }
 
 void loop() {
@@ -76,10 +76,12 @@ void loop() {
 
   // Kiểm tra keypad
   char key = keypad.getKey();
-  if (key == 'D') {
+  if (key == 'D') { // Thực hiện nhập mật khẩu
     checkPass();
-  } else if (key == 'C') {
+  } else if (key == 'C') { // Thực hiện chức năng đổi mật khẩu
     changePass();
+  } else if (key == 'A') { // Thực hiện chức năng đặt thẻ rfid phụ
+    addSecondCard();
   }
 
   // Kiểm tra tín hiệu reset pass
@@ -97,7 +99,6 @@ void scanRFID() {
       scannedUID.concat(String(rfid.uid.uidByte[i] < 0x10 ? "0" : ""));
       scannedUID.concat(String(rfid.uid.uidByte[i], HEX));
     }
-
     Serial.print("[RFID] --> Scanned UID: ");
     Serial.println(scannedUID);
     // Kiểm tra mã RFID
@@ -124,25 +125,27 @@ void scanRFID() {
 boolean checkRFID(String scannedUID) {
   // Kiểm tra mã RFID với danh sách mã được chấp nhận
   if (scannedUID.equals(UIDMaster) || scannedUID.equals(secondUID)) {
-    Serial.println("[SYSTEM] --> Correct UID.");
     attempts = 3;
-    if (isWarning == true) {
+    changePassAttempts = 3;
+    if (isWarning == true) { // Thực hiện khi quét RFID trong khi bị khóa nhập mật khẩu
       mins = 0;
       secs = 0;
+      attempts = 3;
     }
     isWarning = false;
     lockMins = 1;
     return true;
   }
-  Serial.println("[SYSTEM] --> Wrong UID.");
   return false;
 }
 
 void checkPass() {
-  if (attempts == 0) {
+  if (attempts == 0) { // Thực hiện khi người dùng nhập sai mật khẩu liên tục 3 lần
+    attempts = 1;
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Try again in:");
+    // Đếm ngược, mặc định 1 phút
     for (mins = lockMins - 1; mins >= 0; mins--) {
       for (secs = 59; secs >= 0; secs--) {
         lcd.setCursor(5, 1);
@@ -158,19 +161,20 @@ void checkPass() {
       }
     }
 
+    // Nhân đôi thời gian nếu tiếp tục sai mật khẩu
     if (isWarning == true) {
       lockMins = lockMins * 2;
-      if (lockMins > 59) {
+      if (lockMins > 59) { // Thời gian khóa sẽ luôn bé hơn 60 phút
         lockMins = 59;
       }
     }
-    attempts = 1;
     lcd.clear();
 
-  } else {
+  } else { // Thực hiện khi người dùng chưa, hoặc đã nhập sai mật khẩu dưới 2 lần
     int enteredPassword = enterPass("Enter password:");
     Serial.print("[KEYPAD] --> User enterd: ");
     Serial.println(enteredPassword);
+    // So sánh mật khẩu trong bộ nhớ và mật khẩu nhập vào
     if (enteredPassword == systemPassword1 || enteredPassword == systemPassword2) {
       Serial.println("[SYSTEM] --> Correct password.");
       accessDoor();
@@ -178,12 +182,12 @@ void checkPass() {
       isWarning = false;
       lockMins = 1;
       delay(delayTimeDefault);
-    } else {
+    } else { // Sai mật khẩu
       lcd.clear();
       lcd.print("Wrong password!");
       Serial.println("[SYSTEM] --> Wrong password.");
       attempts--;
-      if (attempts == 0) {
+      if (attempts == 0) { // Hiển thị sai mật khẩu, bật còi cảnh báo
         isWarning = true;
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -205,7 +209,7 @@ int enterPass(String msg) {
   int count = 0;
   lcd.clear();
   lcd.print(msg);
-  do {
+  do { // Tự động kết thúc vòng lặp khi đã nhập đủ 4 số
     key = keypad.getKey();
     if (key >= '0' && key <= '9') {
       enterPassSound();
@@ -224,7 +228,7 @@ int enterPass(String msg) {
 }
 
 void accessDoor() {
-  if (lastDoorState == 0) {
+  if (lastDoorState == 0) { // Mở của
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Door opened!");
@@ -236,8 +240,7 @@ void accessDoor() {
     digitalWrite(buzzerPin, HIGH);
     delay(100);
     digitalWrite(buzzerPin, LOW);
-    Serial.println("[SYSTEM] --> Door opened!");
-  } else {
+  } else { // Đóng cửa
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Door closed!");
@@ -245,7 +248,6 @@ void accessDoor() {
     digitalWrite(buzzerPin, HIGH);
     delay(250);
     digitalWrite(buzzerPin, LOW);
-    Serial.println("[SYSTEM] --> Door closed!");
   }
   lastDoorState = !lastDoorState;
 }
@@ -254,47 +256,75 @@ void changePass() {
   lcd.clear();
   int oldPass = 0;
   char key;
-  do {
-    key = keypad.getKey();
+  do { // Kết thúc khi người dùng bấm D
+    if (changePassAttempts == 0) { // Thực hiện khi người dùng nhập sai mk cũ liên tục 3 lần
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Function locked!");
+      warningSound();
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Scan master RFID");
+      lcd.setCursor(0, 1);
+      lcd.print("to unlock!");
+      String unlockUID;
+      do { // Tắt khi người dùng bấm D
+        key = keypad.getKey();
+        if (key == 'C') { // Bấm C để quét RFID
+          unlockUID = readUIDNum();
+          if (unlockUID.equals(UIDMaster)) {
+            lcd.clear();
+            changePassAttempts = 3;
+            return;
+          }
+        }
+      } while (key != 'D');
+      lcd.clear();
+      return;
+    }
 
+    // Xử lý đổi mật khẩu
+    key = keypad.getKey();
     lcd.setCursor(0, 0);
     lcd.print("1. Change pass 1");
     lcd.setCursor(0, 1);
     lcd.print("2. Change pass 2");
     switch (key) {
-      case '1':
+      case '1': // Đổi mật khẩu 1
         oldPass = enterPass("Old password:");
-        if (oldPass == systemPassword1) {
+        if (oldPass == systemPassword1) { // Thực hiện khi nhập đúng mật khẩu cũ
           int newPass = enterPass("New password:");
           EEPROM.writeInt(10, newPass);
           delay(100);
           systemPassword1 = EEPROM.readInt(10);
-          Serial.println("[SYSTEM] --> Reloaded password.");
-          Serial.print("[SYSTEM] --> Changed password 1 to:");
+          Serial.println("[PASSWORD] --> Reloaded password.");
+          Serial.print("[PASSWORD] --> Changed password 1 to:");
           Serial.println(systemPassword1);
           lcd.clear();
           lcd.print("Successfully!");
           delay(delayTimeDefault);
-        } else {
+        } else { // Thực hiện khi nhập sai mật khẩu
+          changePassAttempts--;
           lcd.clear();
           lcd.print("Wrong password!");
           delay(delayTimeDefault);
         }
         break;
-      case '2':
+      case '2': // Đổi mật khẩu 2
         oldPass = enterPass("Old password:");
-        if (oldPass == systemPassword2) {
+        if (oldPass == systemPassword2) { // Thực hiện khi nhập đúng mật khẩu cũ
           int newPass = enterPass("New password:");
           EEPROM.writeInt(100, newPass);
           delay(100);
           systemPassword2 = EEPROM.readInt(100);
-          Serial.println("[SYSTEM] --> Reloaded password.");
-          Serial.print("[SYSTEM] --> Changed password 2 to:");
+          Serial.println("[PASSWORD] --> Reloaded password.");
+          Serial.print("[PASSWORD] --> Changed password 2 to:");
           Serial.println(systemPassword2);
           lcd.clear();
           lcd.print("Successfull");
           delay(delayTimeDefault);
-        } else {
+        } else { // Thực hiện khi nhập sai mật khẩu
+          changePassAttempts--;
           lcd.clear();
           lcd.print("Wrong password!");
           delay(delayTimeDefault);
@@ -305,19 +335,125 @@ void changePass() {
   lcd.clear();
 }
 
-void resetPass() {
+void addSecondCard() {
+  char key;
+  lcd.clear();
+  do {
+    lcd.setCursor(0, 0);
+    lcd.print("Add second RFID");
+    lcd.setCursor(0, 1);
+    lcd.print("Press 'A'");
+    key = keypad.getKey();
+    if (key == 'A') {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Scanning master");
+      lcd.setCursor(0, 1);
+      lcd.print("UID card...");
+      String givenUID = readUIDNum();
+      if (givenUID.equals(UIDMaster)) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Correct card!");
+        lcd.setCursor(0, 1);
+        lcd.print("Next step...");
+        delay(delayTimeDefault);
+        String secondCardUID;
+        lcd.clear();
+        do {
+          key = keypad.getKey();
+          lcd.setCursor(0, 0);
+          lcd.print("Scanning new");
+          lcd.setCursor(0, 1);
+          lcd.print("UID card...");
+          secondCardUID = readUIDNum();
+          while (true) { // Kết thúc khi nhập đúng hoặc sai mật khẩu
+            int givenPass = enterPass("Enter password:");
+            if (givenPass == defaultPassword1 || givenPass == defaultPassword2) { // Thực hiện khi nhập đúng mật khẩu
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("Add new card");
+              lcd.setCursor(0, 1);
+              lcd.print("successfully!");
+              Serial.print("Added: ");
+              Serial.println(secondUID);
+              writeUIDToEEPROM(500, secondCardUID);
+              secondUID = readUIDFromEEPROM(500);
+              delay(delayTimeDefault);
+              lcd.clear();
+              return;
+            } else { // Thực hiện khi nhập sai mật khẩu
+              lcd.clear();
+              lcd.setCursor(0, 0);
+              lcd.print("Wrong password!");
+              delay(delayTimeDefault);
+              return;
+            }
+          }
+        } while (secondCardUID == "");
+      } else { // Thực hiện khi quét sai thẻ
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Wrong card!");
+        delay(delayTimeDefault);
+        key = 'D';
+      }
+    }
+  } while (key != 'D');
+  lcd.clear();
+}
 
+String readUIDNum() {
+  String readingUID = "";
+  while (true) {
+    if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) { // Thực hiện khi có thẻ đưa vào quét
+
+      for (byte i = 0; i < rfid.uid.size; i++) {
+        readingUID.concat(String(rfid.uid.uidByte[i] < 0x10 ? "0" : ""));
+        readingUID.concat(String(rfid.uid.uidByte[i], HEX));
+      }
+      scanRFIDSound();
+      if (readingUID != "") { // Thực hiện khi đã đọc được UID của thẻ
+        return readingUID;
+      }
+      rfid.PICC_HaltA();
+      rfid.PCD_StopCrypto1();
+    }
+  }
+}
+
+String readUIDFromEEPROM(int addrOffset) {
+  int newStrLen = EEPROM.read(addrOffset);
+  char data[newStrLen + 1];
+  for (int i = 0; i < newStrLen; i++)
+  {
+    data[i] = EEPROM.read(addrOffset + 1 + i);
+  }
+  data[newStrLen] = '\0';
+  return String(data);
+}
+
+void writeUIDToEEPROM(int addrOffset, const String &strToWrite)
+{
+  byte len = strToWrite.length();
+  EEPROM.write(addrOffset, len);
+  for (int i = 0; i < len; i++)
+  {
+    EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
+  }
+}
+
+void resetPass() {
   EEPROM.writeInt(10, defaultPassword1);
   delay(100);
   EEPROM.writeInt(100, defaultPassword2);
   delay(100);
-  Serial.println("[SYSTEM] --> Password reseted.");
-
+  Serial.println("[PASSWORD] --> Password reseted.");
   systemPassword1 = EEPROM.readInt(10);
   delay(100);
   systemPassword2 = EEPROM.readInt(100);
   delay(100);
-  Serial.println("[SYSTEM] --> Reloaded password.");
+  Serial.println("[PASSWORD] --> Reloaded password.");
 
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -326,6 +462,12 @@ void resetPass() {
   lcd.print("successfull");
   delay(delayTimeDefault);
   lcd.clear();
+}
+
+void scanRFIDSound() {
+  digitalWrite(buzzerPin, HIGH);
+  delay(500);
+  digitalWrite(buzzerPin, LOW);
 }
 
 void enterPassSound() {
