@@ -14,7 +14,7 @@ Notes:
 Ở Menu chính:
   - Bấm D để vào chế độ nhập mật khẩu
   - Bấm C để vào chế độ đổi mật khẩu
-  - Bấm B để vào chế độ thêm thẻ RFID thứ hai
+  - Bấm A để vào chế độ thêm thẻ RFID thứ hai
 
 Ở các Menu chức năng:
   - Bấm D để trở về hoặc thoát
