@@ -1,4 +1,4 @@
-#IOT102 Project - Smart Lock
+IOT102 Project - Smart Lock
 
 Thực hiện: SE1730 - Nhóm 7
      - Hoàng Tuấn Anh
