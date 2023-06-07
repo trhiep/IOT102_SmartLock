@@ -15,10 +15,13 @@
     Ở Menu chính:
       - Bấm D để vào chế độ nhập mật khẩu
       - Bấm C để vào chế độ đổi mật khẩu
-      - Bấm A để vào chế độ thêm thẻ RFID thứ hai
+      - Bấm B để vào chế độ thêm thẻ RFID thứ hai
     Ở các Menu chức năng:
       - Bấm D để trở về hoặc thoát
       - Bấm * để xóa tất cả các số đã nhập tại chức năng nhập mật khẩu
+
+    Sản phẩm có sử dụng thư viện EEPROMex và EEPROMVar để tiện lợi hơn trong việc lưu mật khẩu
+    Link thư viện: https://github.com/thijse/Arduino-EEPROMEx
 */
 
 #include <EEPROMex.h>
