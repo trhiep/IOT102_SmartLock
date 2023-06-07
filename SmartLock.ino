@@ -41,8 +41,8 @@ char keys[ROWS][COLS] = {
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
 };
-byte rowPins[ROWS] = {7, 6, 5, 4};    // Kết nối các hàng từ chân 9 đến 6 trên Arduino
-byte colPins[COLS] = {A3, A2, A1, A0};    // Kết nối các cột từ chân 5 đến 2 trên Arduino
+byte rowPins[ROWS] = {7, 6, 5, 4};
+byte colPins[COLS] = {A3, A2, A1, A0};
 
 int defaultPassword1 = 1234;
 int defaultPassword2 = 9999;
