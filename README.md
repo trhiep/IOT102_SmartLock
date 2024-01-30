@@ -22,7 +22,7 @@ Notes:
 
 Sản phẩm có sử dụng thư viện EEPROMex và EEPROMVar để tiện lợi hơn trong việc lưu mật khẩu
 
-Link thư viện: [GitHub - Arduino-EEPROMEx]([URL](https://github.com/thijse/Arduino-EEPROMEx))
+Link thư viện: [GitHub - Arduino-EEPROMEx](https://github.com/thijse/Arduino-EEPROMEx)
 
-Video demo sản phẩm: [YouTube]([URL](https://youtu.be/mg_52sTWitM)https://youtu.be/mg_52sTWitM)
+Video demo sản phẩm: [YouTube](https://youtu.be/mg_52sTWitM)
 
